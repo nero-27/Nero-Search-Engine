@@ -25,10 +25,7 @@ from indexing.diskindexwriter import DiskIndexWriter
 from indexing.diskpositionalindex import DiskPositionalIndex
 import math
 from queue import PriorityQueue
-
-
-"""This basic program builds a term-document matrix over the .txt files in 
-the same directory as this file."""
+from strategy import Ranking
 
 
 def index_corpus(corpus : DocumentCorpus, originalPath) -> Index:
@@ -41,18 +38,16 @@ def index_corpus(corpus : DocumentCorpus, originalPath) -> Index:
     positional_inverted_index = PositionalInvertedIndex(vocabulary, len(corpus))
     soundex_index = SoundexIndex(vocabulary_authors, len(corpus))
     doc_weights = []
+
     for d in corpus:
-        # print(f"Found document {d.id, d.title}")
-        # TODO:
-        #   Tokenize the document's content by creating an EnglishTokenStream around the document's .content()
-        #   Iterate through the token stream, processing each with token_processor's process_token method.
-        #   Add the processed token (a "term") to the vocabulary set.
+        tokens_d = 0    # no of tokens in d
         pos = 0
         tftd = {}
         for ets in EnglishTokenStream(d.get_content()):
             pos += 1
             list_of_tokens = token_processor.remove_hyphens(ets)
             for t in token_processor.process_token(list_of_tokens):
+                tokens_d += 1
                 if t not in tftd:
                     tftd[t] = 1
                 else:
@@ -273,74 +268,56 @@ def buildDiskIndex(corpusPath, corpusName, index, vocab):
     endDiskTime = time.time() - startDiskTime
     print("Disk Indexing time = ", endDiskTime, end='\n')
     
+def priority_queue(ad):
+    # store ad in binary heap priority queue by value (score)
+    queue = PriorityQueue()
+
+    # add all ad elements to queue, gets sorted implicity after every put
+    for doc_id, score in ad.items():
+        queue.put((-1*score, doc_id))
+
+    return queue
+
+
+def scoring_method(phraseQueryBag, diskIndex, corpus_length, method):
+    rank = Ranking(phraseQueryBag, diskIndex, corpus_length)
+    ad = rank.get_scores(method)
+    queue = priority_queue(ad)
+    print('-'*80)
+    count = 0
+    while True:
+        if not queue.empty():
+            count += 1
+            i = queue.get()
+            if i:
+                if d.get_document(i[1]).author:
+                    print(i[1],"=> ", d.get_document(i[1]).title, '===> ', d.get_document(i[1]).author)
+                else:
+                    print(i[1],"=> ", d.get_document(i[1]).title, '(score: ',abs(i[0]), ')') 
+            if count == 10:
+                break  
+        else:
+            break
+    print("\nNumber of documents = ", count)
+
+
 
 def ranked_query_search(corpusPath, d):
     tp = BasicTokenProcessor()
     diskIndex = DiskPositionalIndex(corpusPath)
 
-    while True:
+    # score_method = input (" Select one ranking method: \n1.Default \n2.tf-idf \n3.Okapi BM25 \n3.Wacky \n")
     
+    while True:
+        method = input (" Select one ranking method: \n1.Default \n2.tf-idf \n3.Okapi BM25 \n4.Wacky \n").lower()
         phraseQuery = input('Enter a query for ranked retrieval : ')
         query = phraseQuery.split(' ')  # bag of words
         phraseQueryBag = [tp.process_token([q]) for q in query]
         corpus_length = len(d)
 
-        # store score of query for docs in ad
-        ad = {} 
-        for t in phraseQueryBag:
-            t_postings = diskIndex.get_postings_with_positions(t)
-            dft = len(t_postings)
-            wqt = math.log(1 + (corpus_length / dft))
-            for doc in t_postings:
-                doc_id = doc[0]
-                tftd = len(doc[-1])
-                wdt = 1 + math.log(tftd)
-                Ld = diskIndex.get_doc_weight(doc_id)
-                temp = (wdt*wqt) / Ld
-                if doc_id in ad:
-                    ad[doc_id] += temp
-                else:
-                    ad[doc_id] = temp
+        # 4 different scoring methods for additional requirements
+        scoring_method(phraseQueryBag, diskIndex, corpus_length, method)
 
-        # store ad in binary heap priority queue by value (score)
-        queue = PriorityQueue()
-
-        # add all ad elements to queue, gets sorted implicity after every put
-        for doc_id, score in ad.items():
-            queue.put((-1*score, doc_id))
-
-       
-        print('-'*80)
-        # try:
-        #     # get postings without positions
-        #     phraseQueryPosting = comps.get_postings(diskIndex, tp) # got to termliteral
-        # except KeyError:
-        #     print('Cannot find postings for the term')
-        #     break
-
-        # try:
-        #     len(phraseQueryPosting) == 0
-        # except TypeError:
-        #     print("Query not found in corpus. Search another query\n")
-        #     continue
-        count = 0
-        while True:
-            if not queue.empty():
-                count += 1
-                i = queue.get()
-                if i:
-                    if d.get_document(i[1]).author:
-                        print(i[1],"=> ", d.get_document(i[1]).title, '===> ', d.get_document(i[1]).author)
-                    else:
-                        print(i[1],"=> ", d.get_document(i[1]).title, '(score: ',abs(i[0]), ')') 
-                if count == 10:
-                    break  
-            else:
-                break
-        print("\nNumber of documents = ", count)
-
-                    
-        # _print_documents(d, phraseQueryPosting)
         print('-'*80)
         _open = input('Open a document? (y/n) \n')
         if _open == 'y' or _open == 'Y':
