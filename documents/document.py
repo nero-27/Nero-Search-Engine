@@ -17,6 +17,10 @@ class Document(ABC):
         pass
 
     @abstractmethod
+    def get_doc_size(self) -> int:
+        pass
+    
+    @abstractmethod
     def author(self) -> str:
         pass
 

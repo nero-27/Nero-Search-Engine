@@ -9,14 +9,14 @@ class DiskPositionalIndex(Index):
     
     def __init__(self, path) -> None:
         self.path = path
-        self.db = DiskIndexWriter(path)
+        self.diw = DiskIndexWriter(path)
     # get postings with positions
     def get_postings_with_positions(self, term : string):
         
         frmt = '>i'
         b = struct.calcsize(frmt)    # size of integer format used for packing
         with open(os.path.join(self.path,'postings.bin'), 'rb') as f:
-            postingBegins = self.db.get_entry(term)
+            postingBegins = self.diw.get_entry(term)
             finalPostings = []
             f.seek(postingBegins)
             dft = struct.unpack(frmt, f.read(b))[0]
@@ -48,7 +48,7 @@ class DiskPositionalIndex(Index):
         b = struct.calcsize(frmt)
 
         with open(os.path.join(self.path, 'postings.bin'), 'rb') as f:
-            start_position = self.db.get_entry(term)
+            start_position = self.diw.get_entry(term)
             f.seek(start_position)
             dft = struct.unpack(frmt, f.read(b))[0] # no of docs
             doc_gap = 0
@@ -58,20 +58,32 @@ class DiskPositionalIndex(Index):
                 posting.append(doc_id + doc_gap) # append doc_id
                 doc_gap = doc_id
                 tft = struct.unpack(frmt, f.read(b))[0]
-                posting.append([])
+                posting.append(tft)
                 f.seek(b*tft, 1)
                 dft -= 1
                 posting_docids.append(posting)
 
         return posting_docids
-      
-    def get_doc_weight(self, doc_id):
-        frmt = 'd'
-        b = struct.calcsize(frmt)
 
+      
+    def get_doc_weights(self, doc_id) -> dict:
+        
+        b = struct.calcsize('f')
+        weights = {}
         with open(os.path.join(self.path, 'docWeights.bin'), 'rb') as f:
-            f.seek(b*doc_id, 1)
-            return struct.unpack(frmt, f.read(b))[0]
+            f.seek(b*doc_id*4, 1)
+            weights['ld'] = struct.unpack('f', f.read(b))[0]
+            weights['tftd_avg'] = struct.unpack('f', f.read(b))[0]
+            weights['docLengthd'] = struct.unpack('i', f.read(b))[0]
+            weights['byteSized'] = struct.unpack('i', f.read(b))[0]
+
+            return weights
+
+    def get_docLengthA(self):
+        b = struct.calcsize('f')
+        with open(os.path.join(self.path, 'docWeights.bin'), 'rb') as f:
+            f.seek(-b,2)    # last position - b bytes
+            return struct.unpack('f', f.read(b))[0] 
     
 
 

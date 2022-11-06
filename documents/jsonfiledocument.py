@@ -4,6 +4,7 @@ from typing import Iterable
 from .document import Document
 import json
 from io import StringIO
+import os
 
 class JsonFileDocument(Document):
     """
@@ -27,6 +28,10 @@ class JsonFileDocument(Document):
             file_like_body = StringIO(json_data['body'])
             # file_like_body = json_data['body']
         return file_like_body
+
+    def get_doc_size(self) -> int:
+        byteSized = os.path.getsize(self.path)
+        return byteSized
 
     @property
     def get_string_content(self) -> Iterable[str]:
