@@ -26,6 +26,7 @@ from indexing.diskpositionalindex import DiskPositionalIndex
 import math
 from queue import PriorityQueue
 from strategy import Ranking
+import sys
 
 
 def index_corpus(corpus : DocumentCorpus, originalPath) -> Index:
@@ -34,20 +35,23 @@ def index_corpus(corpus : DocumentCorpus, originalPath) -> Index:
     diskWriter = DiskIndexWriter(originalPath)
     vocabulary = set()
     vocabulary_authors = set()
+    corpus_length = len(corpus)
 
-    positional_inverted_index = PositionalInvertedIndex(vocabulary, len(corpus))
-    soundex_index = SoundexIndex(vocabulary_authors, len(corpus))
+    positional_inverted_index = PositionalInvertedIndex(vocabulary, corpus_length)
+    soundex_index = SoundexIndex(vocabulary_authors, corpus_length)
     doc_weights = []
+    docLengthAcc = 0
 
     for d in corpus:
-        tokens_d = 0    # no of tokens in d
+        byteSized = d.get_doc_size()
+        docLengthd = 0    # no of tokens in d
         pos = 0
         tftd = {}
         for ets in EnglishTokenStream(d.get_content()):
             pos += 1
             list_of_tokens = token_processor.remove_hyphens(ets)
             for t in token_processor.process_token(list_of_tokens):
-                tokens_d += 1
+                docLengthd += 1
                 if t not in tftd:
                     tftd[t] = 1
                 else:
@@ -55,20 +59,28 @@ def index_corpus(corpus : DocumentCorpus, originalPath) -> Index:
                 vocabulary.add(t)
                 positional_inverted_index.add_term(t, d.id, pos)
 
+        docLengthAcc += docLengthd
         
 
         # TODO: calculate Ld, write to disk docWeights.bin
         # create function to write to docWeights.bin file in diskWriter,call it here
         wdt_sum =  0
         ld = 0
-
+        tftd_avg = 0
         for key, value in tftd.items():
-            wdt = (1 + math.log(value))
+            wdt = (1 + math.log(value)) # store in dict of docid > wdt
             wdt_sum += wdt*wdt
+            tftd_avg += value
+
+        if len(tftd) != 0:
+            tftd_avg = docLengthd / len(tftd)
+        else:
+            tftd_avg = 0
 
         ld = math.sqrt(wdt_sum)
-        doc_weights.append(ld)
-        # diskWriter.writeDocWeights(ld)
+        # print(ld)
+        doc_weights.append( (ld, tftd_avg, docLengthd, byteSized) )
+  
 
 
         author = d.author.split(' ')
@@ -78,7 +90,9 @@ def index_corpus(corpus : DocumentCorpus, originalPath) -> Index:
             soundex_index.add_author(author[0], d.id)
             soundex_index.add_author(author[1], d.id)
 
-    # diskWriter = DiskIndexWriter(originalPath)
+    docLengthA = docLengthAcc / corpus_length
+    doc_weights.append(docLengthA)  # append average length of doc at the end 
+
     diskWriter.writeDocWeights(doc_weights)
     
 
@@ -238,30 +252,45 @@ def _index_folder(corpus_path, folder, d):
         if quit == 'N' or quit == 'n':
             break
 
+def special_queries(query):
+    qry = query.split(' ')
+    if len(qry) > 2:
+        print('Invalid query: special query accept only one argument')
+        sys.exit()
 
-def buildMemoryIndex(corpusPath, corpusName, d):
-    originalPath = os.path.join(corpusPath, corpusName.lower())
-    # first_file = os.listdir(originalPath)[0] # get name of first file
-    # extension = os.path.splitext(first_file)[1] # get extension of file
-    # if extension == '.json':
-    #     d = DirectoryCorpus.load_json_directory(originalPath, extension)
-    # if extension == '.txt':
-    #     d = DirectoryCorpus.load_text_directory(originalPath, extension)
+    if qry[0] == ':q':
+        sys.exit()
+    if qry[0] == ':stem':
+        stemmer = Porter2Stemmer()
+        print(stemmer.stem(qry[1]))
 
-    # d = get_directory(originalPath)
+    if qry[0] == ':vocab':
+        l = sorted(list(vocab)[0:1000])
+        for i in l:
+            print(i)
+        print("Number of vocab words = ", len(l)) 
+    if qry[0] == ':author':
+        try:
+            docs = soundex.get_author_postings(qry[1])
+            _print_documents(d, docs)
+        except:
+            print('The directory you chose does not contain authors')
+    
 
+def buildMemoryIndex(path, d):
+    # originalPath = os.path.join(corpusPath, corpusName.lower())
     
     startIndexTime = time.time()
     print(f'indexing...\n')
-    index, soundex, vocab = index_corpus(d, originalPath)
+    index, soundex, vocab = index_corpus(d, path)
     executionTime = time.time() - startIndexTime
     print("Indexing time = ", executionTime ," seconds\n")
 
     return index, soundex, vocab
 
-def buildDiskIndex(corpusPath, corpusName, index, vocab):
+def buildDiskIndex(corpus_path, index, vocab):
     # call diskindexwriter on positional index
-    diskWriter = DiskIndexWriter(os.path.join(corpusPath, corpusName))
+    diskWriter = DiskIndexWriter(corpus_path)
     startDiskTime = time.time()
     print("Disk Indexing...\n")
     diskWriter.writeIndex(index, vocab)
@@ -305,23 +334,31 @@ def scoring_method(phraseQueryBag, diskIndex, corpus_length, method):
 def ranked_query_search(corpusPath, d):
     tp = BasicTokenProcessor()
     diskIndex = DiskPositionalIndex(corpusPath)
-
-    # score_method = input (" Select one ranking method: \n1.Default \n2.tf-idf \n3.Okapi BM25 \n3.Wacky \n")
     
     while True:
-        method = input (" Select one ranking method: \n1.Default \n2.tf-idf \n3.Okapi BM25 \n4.Wacky \n").lower()
-        phraseQuery = input('Enter a query for ranked retrieval : ')
+        method = input ("Select one ranking method: \n1.Default \n2.tf-idf \n3.Okapi BM25 \n4.Wacky \n").lower()
+        phraseQuery = input('> ')
+        if phraseQuery.startswith(':'):
+            special_queries(phraseQuery)
+            end_special_query = input("Search another special query? y / n\n")
+            if end_special_query == 'n':
+                sys.exit()
+            else:
+                continue
+    
         query = phraseQuery.split(' ')  # bag of words
-        phraseQueryBag = [tp.process_token([q]) for q in query]
+        for q in range(len(query)):
+            query[q] = tp.process_token([query[q]])
+        # phraseQueryBag = [tp.process_token([q]) for q in query]
         corpus_length = len(d)
 
         # 4 different scoring methods for additional requirements
-        scoring_method(phraseQueryBag, diskIndex, corpus_length, method)
+        scoring_method(query, diskIndex, corpus_length, method)
 
         print('-'*80)
         _open = input('Open a document? (y/n) \n')
         if _open == 'y' or _open == 'Y':
-            id = int(input("Enter the id of document to open it = "))
+            id = int(input("Enter doc_id = "))
             print('-'*80, '\n')
             print(d.get_document(id).get_string_content)
             print('-'*80, '\n')
@@ -336,7 +373,9 @@ def boolean_query_search(corpusPath):
     tp = BasicTokenProcessor()
     diskIndex = DiskPositionalIndex(corpusPath)
     while True:
-        boolean_query = input("Enter a boolean or phrase query : ")
+        boolean_query = input("> ")
+        if boolean_query.startswith(':'):
+            special_queries()
         bqp = BooleanQueryParser()
         comps = bqp.parse_query(boolean_query)
         
@@ -358,7 +397,7 @@ def boolean_query_search(corpusPath):
         print('-'*80)
         _open = input('Open a document? (y/n) \n')
         if _open == 'y' or _open == 'Y':
-            id = int(input("Enter the id of document to open it = "))
+            id = int(input("Enter doc_id = "))
             print('-'*80, '\n')
             print(d.get_document(id).get_string_content)
             print('-'*80, '\n')
@@ -382,15 +421,17 @@ if __name__ == "__main__":
         build = input("Select one: \n1. Build Index \n2. Query index\n")
         if build == '1':
             # build memory index and disk index
-            corpusName = input("Pleae select one of the following folder to search (no spacses) \n=> National Park \n=> Moby Dick \n=> mlb (major league baseball)\nType folder name without spaces:\n")
-            d = get_directory(os.path.join(corpusPath, corpusName))
-            index, soundex, vocab = buildMemoryIndex(corpusPath, corpusName, d)
-            buildDiskIndex(corpusPath, corpusName, index, vocab)
+            corpusName = input("Enter folder name (no spaces) \n=> National Park \n=> Moby Dick \n=> mlb (major league baseball)\nType folder name without spaces:\n")
+            path = os.path.join(corpusPath, corpusName)
+            d = get_directory(path)
+            # index, soundex, vocab = buildMemoryIndex(corpusPath, corpusName, d)
+            index, soundex, vocab = buildMemoryIndex(path, d)
+            buildDiskIndex(path, index, vocab)
             ranked_query_search(os.path.join(corpusPath, corpusName), d)
             
         elif build == '2':
             # query index
-            path = input("Enter path of disk index (excluding file): ")
+            path = input("Path to directory: ")
             # corpusName = os.path.basename(os.path.normpath(path))
             d = get_directory(path)
             ranked_query_search(path, d)
@@ -403,16 +444,16 @@ if __name__ == "__main__":
         
         if build == '1':
             # build index
-            corpusName = input("Pleae select one of the following folder to search (no spacses) \n=> National Park \n=> Moby Dick \n=> mlb (major league baseball)\nType folder name without spaces:\n")
-            d = get_directory(os.path.join(corpusPath, corpusName))
-            index, soundex, vocab = buildMemoryIndex(corpusPath, corpusName, d)
-            buildDiskIndex(corpusPath, corpusName, index, vocab)
-            boolean_query_search(os.path.join(corpusPath, corpusName))
+            corpusName = input("Enter folder name (no spaces) \n=> National Park \n=> Moby Dick \n=> mlb (major league baseball)\nType folder name without spaces:\n")
+            path = os.path.join(corpusPath, corpusName)
+            d = get_directory(path)
+            index, soundex, vocab = buildMemoryIndex(path, d)
+            buildDiskIndex(path, index, vocab)
+            boolean_query_search(path)
             
         elif build == '2':
             # query index
-            path = input("Enter path of disk index (excluding file): ")
-            # corpusName = os.path.basename(os.path.normpath(path))
+            path = input("Path to directory: ")
             d = get_directory(path)
             boolean_query_search(path)
             
