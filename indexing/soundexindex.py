@@ -28,6 +28,7 @@ class SoundexIndex(Index):
 
         else:
             self.hashmap_authors[hashed_author] = [ [doc_id, []] ] 
+        # print(self.hashmap_authors)
 
 
     def get_author_postings(self, hashed_author : str) -> Iterable[Posting]:

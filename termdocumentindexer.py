@@ -95,7 +95,6 @@ def index_corpus(corpus : DocumentCorpus, originalPath) -> Index:
 
     diskWriter.writeDocWeights(doc_weights)
     
-
     return positional_inverted_index, soundex_index, vocabulary
 
 def get_directory(corpusPath):  # corpusPath > upto folder name
@@ -119,140 +118,44 @@ def _print_documents(d, postings):
     print("\nNumber of documents = ", len(postings))
 
 def _index_folder(corpus_path, folder, d):
-    original_path = os.path.join(corpus_path, folder.lower())
-
-    startIndexTime = time.time()
-    print(f'indexing...\n')
-    index, soundex, vocab = index_corpus(d, original_path)
-    executionTime = time.time() - startIndexTime
-    print("Indexing time = ", executionTime ," seconds\n")
-
-    start_disk_time = time.time()
-    print(f'disk writing...\n')
-    diskWriter = DiskIndexWriter(original_path)
-    diskWriter.writeIndex(index, vocab)
-    print('disk writing time = ', time.time() - start_disk_time, ' seconds\n')
 
     tp = BasicTokenProcessor()
-    diskIndex = DiskPositionalIndex(original_path)
+    diskIndex = DiskPositionalIndex(corpus_path)
+
+    # search by author
     while True:
-        # user query
-        option = input('\nSelect one: \t\n1. Input query manually \t\n2. Use Special queries \n\n')
-        if option == '1':
-            # Input Query manually
-            search_by = input("Search by : \n\t1. Query \n\t2. Author \n\nSelect one : ")
-            if search_by == '1':
-                # Query
-                query = input('Enter a word to search : ')
-                bqp = BooleanQueryParser()
-                comps = bqp.parse_query(query)
-                print(comps)
-                print('-'*80)
-                try:
-                    boolean_posting = comps.get_postings(diskIndex, tp)
-                except KeyError:
-                    print('Cannot find postings for the term')
-                    break
-
-                if len(boolean_posting) == 0:
-                    print("Query not found in corpus. Search another query\n")
-                    continue
-
-                _print_documents(d, boolean_posting)
-                print('-'*80)
-                _open = input('Open a document? (y/n) \n')
-                if _open == 'y' or _open == 'Y':
-                    id = int(input("Enter the id of document to open it = "))
-                    print('-'*80, '\n')
-                    print(d.get_document(id).get_string_content)
-                    print('-'*80, '\n')
-                    
-                end_query = input("Search another query? y / n\n")
-                if end_query.lower() == 'n':
-                    break
-                else:
-                    continue
-
-
-            if search_by == '2':
-                # search by author
-                while True:
-                    author_query = input('Enter author name to search : ')
-                    bqp = BooleanQueryParser()
-                    comps_author = bqp.parse_query(author_query)
-                    print('query = ',comps_author)
-                    print('-'*80)
-                    try:
-                        author_posting = comps_author.get_author_postings(soundex)
-                    except KeyError:
-                        print('Cannot find postings for the term')
-                        break
-
-                    if len(author_posting) == 0:
-                        print("No results found\n")
-                        continue
-
-                    _print_documents(d, author_posting)
-
-                    print('-'*80)
-                    _open = ('Open a document? (y/n)')
-                    if _open == 'y' or _open == 'Y':
-                        id = input("Enter the id of document to open it = ")
-                        print('-'*80, '\n')
-                        print(d.get_document(id).get_string_content)
-                        print('-'*80, '\n')
-
-                    end_author_query = input("Search another author? y / n\n")
-                    if end_author_query.lower() == 'n':
-                        break
-                    else:
-                        continue
-  
-
-        if option == '2':
-            # search by special query            
-            while True:
-                print("Input one of the following special queries \n:q => to quit \n:stem <word> => to stem a word \n:index <folder_name> => to search different folder \n:vocab => get 1st 1000 words from vocabulary\n:author <author_name> => to search by author\n")
-                special_query = input('Input special query: ')
-                qry = special_query.split(' ')
-                if len(qry) > 2:
-                    print('Invalid query: special query accept only one argument')
-                    break
-
-                if qry[0] == ':q':
-                    break
-                if qry[0] == ':stem':
-                    stemmer = Porter2Stemmer()
-                    print(stemmer.stem(qry[1]))
-                if qry[0] == ':index':
-                    _index_folder(corpus_path, qry[1])
-                if qry[0] == ':vocab':
-                    l = sorted(list(vocab)[0:1000])
-                    for i in l:
-                        print(i)
-                    print("Number of vocab words = ", len(l)) 
-                if qry[0] == ':author':
-                    try:
-                        docs = soundex.get_author_postings(qry[1])
-                        _print_documents(d, docs)
-                    except:
-                        print('The directory you chose does not contain authors')
-                        break
-
-                end_special_query = input("Search another special query? y / n\n")
-                if end_special_query.lower() == 'n':
-                    break 
-                else:
-                    continue
-
-            if qry[0] == ':q':
-                break    
-
-        quit = input('Do you want to continue searching? (Y/y or  N/n) \n')
-        if quit == 'N' or quit == 'n':
+        author_query = input('Enter author name to search : ')
+        bqp = BooleanQueryParser()
+        comps_author = bqp.parse_query(author_query)
+        print('query = ',comps_author)
+        print('-'*80)
+        try:
+            author_posting = comps_author.get_author_postings(soundex)
+        except KeyError:
+            print('Cannot find postings for the term')
             break
 
-def special_queries(query):
+        if len(author_posting) == 0:
+            print("No results found\n")
+            continue
+
+        _print_documents(d, author_posting)
+
+        print('-'*80)
+        _open = ('Open a document? (y/n)')
+        if _open == 'y' or _open == 'Y':
+            id = input("Enter the id of document to open it = ")
+            print('-'*80, '\n')
+            print(d.get_document(id).get_string_content)
+            print('-'*80, '\n')
+
+        end_author_query = input("Search another author? y / n\n")
+        if end_author_query.lower() == 'n':
+            break
+        else:
+            continue
+
+def special_queries(query, corpus_path):
     qry = query.split(' ')
     if len(qry) > 2:
         print('Invalid query: special query accept only one argument')
@@ -263,7 +166,12 @@ def special_queries(query):
     if qry[0] == ':stem':
         stemmer = Porter2Stemmer()
         print(stemmer.stem(qry[1]))
+        sys.exit()
 
+    if qry[0] == ':index':
+        d = get_directory(path)
+        index, soundex, vocab = index_corpus(d, corpus_path)
+        
     if qry[0] == ':vocab':
         l = sorted(list(vocab)[0:1000])
         for i in l:
@@ -277,9 +185,7 @@ def special_queries(query):
             print('The directory you chose does not contain authors')
     
 
-def buildMemoryIndex(path, d):
-    # originalPath = os.path.join(corpusPath, corpusName.lower())
-    
+def buildMemoryIndex(path, d):  
     startIndexTime = time.time()
     print(f'indexing...\n')
     index, soundex, vocab = index_corpus(d, path)
@@ -320,7 +226,7 @@ def scoring_method(phraseQueryBag, diskIndex, corpus_length, method):
             i = queue.get()
             if i:
                 if d.get_document(i[1]).author:
-                    print(i[1],"=> ", d.get_document(i[1]).title, '===> ', d.get_document(i[1]).author)
+                    print(i[1],"=> ", d.get_document(i[1]).title, '===> ', d.get_document(i[1]).author, '(score: ',abs(i[0]), ')')
                 else:
                     print(i[1],"=> ", d.get_document(i[1]).title, '(score: ',abs(i[0]), ')') 
             if count == 10:
@@ -349,7 +255,6 @@ def ranked_query_search(corpusPath, d):
         query = phraseQuery.split(' ')  # bag of words
         for q in range(len(query)):
             query[q] = tp.process_token([query[q]])
-        # phraseQueryBag = [tp.process_token([q]) for q in query]
         corpus_length = len(d)
 
         # 4 different scoring methods for additional requirements
@@ -375,7 +280,8 @@ def boolean_query_search(corpusPath):
     while True:
         boolean_query = input("> ")
         if boolean_query.startswith(':'):
-            special_queries()
+            special_queries(boolean_query, corpusPath)
+
         bqp = BooleanQueryParser()
         comps = bqp.parse_query(boolean_query)
         
@@ -448,8 +354,24 @@ if __name__ == "__main__":
             path = os.path.join(corpusPath, corpusName)
             d = get_directory(path)
             index, soundex, vocab = buildMemoryIndex(path, d)
-            buildDiskIndex(path, index, vocab)
-            boolean_query_search(path)
+            if corpusName.startswith('mlb'):
+                author = input("Search by author? (y/n)\n")
+                if author == 'y':
+                    author_query = input("> ")
+                    bqp = BooleanQueryParser()
+                    comps_author = bqp.parse_query(author_query)
+                    author_postings = comps_author.get_author_postings(soundex)
+                    _print_documents(d, author_postings)
+                    print('-'*80)
+                    _open = input('Open a document? (y/n) \n')
+                    if _open == 'y' or _open == 'Y':
+                        id = int(input("Enter doc_id = "))
+                        print('-'*80, '\n')
+                        print(d.get_document(id).get_string_content)
+                        print('-'*80, '\n')
+                else:
+                    buildDiskIndex(path, index, vocab)
+                    boolean_query_search(path)
             
         elif build == '2':
             # query index

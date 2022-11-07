@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Iterable
 from .document import Document
 from io import StringIO
+import os
 
 class TextFileDocument(Document):
     """
@@ -17,6 +18,10 @@ class TextFileDocument(Document):
 
     def get_content(self) -> Iterable[str]:
         return open(self.path)
+
+    def get_doc_size(self) -> int:
+        byteSized = os.path.getsize(self.path)
+        return byteSized
 
     @property
     def get_string_content(self) -> Iterable[str]:

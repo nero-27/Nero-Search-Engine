@@ -10,12 +10,7 @@ class AndQuery(QueryComponent):
 
     def get_postings(self, index : Index, tp) -> list[Posting]:
         result = self.components[0].get_postings(index, tp)
-        # result = self.components[0].get_postings_without_positions(index)
-        
-        # TODO: program the merge for an AndQuery, by gathering the postings of the composed QueryComponents and
-		# intersecting the resulting postings.
       
-        doclists = []
         for comp in self.components[1:]:
             posting = comp.get_postings(index, tp)
             temp = self._AndMerge(result, posting)
@@ -25,10 +20,7 @@ class AndQuery(QueryComponent):
 
     def get_author_postings(self, soundex : Index) -> list[Posting]:
         result = self.components[0].get_author_postings(soundex)
-        
-        # TODO: program the merge for an AndQuery, by gathering the postings of the composed QueryComponents and
-		# intersecting the resulting postings.
-      
+
         doclists = []
         for comp in self.components[1:]:
             posting = comp.get_author_postings(soundex)

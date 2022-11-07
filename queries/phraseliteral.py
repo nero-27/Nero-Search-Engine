@@ -11,14 +11,9 @@ class PhraseLiteral(QueryComponent):
         self.terms = terms.split(' ')
 
     def get_postings(self, index, tp) -> list[Posting]:
-        # token_processor = BasicTokenProcessor()
         _tk = tp.process_token([self.terms[0]])[0]
         print('_tk = ', _tk)
-        # result = index.get_postings(_tk)
         result = index.get_postings_with_positions(_tk)
-
-        # TODO: program this method. Retrieve the postings for the individual terms in the phrase,
-		# and positional merge them together.
 
         diff = 0
         for t in self.terms[1:]:
@@ -26,7 +21,6 @@ class PhraseLiteral(QueryComponent):
             
             tk = tp.process_token([t])[0]
             try:
-                # posting = index.get_postings(tk)
                 posting = index.get_postings_with_positions(tk)
             except KeyError:
                 print(f'Term {t} not found in corpus')

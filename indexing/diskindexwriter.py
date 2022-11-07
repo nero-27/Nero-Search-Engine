@@ -10,7 +10,7 @@ class DiskIndexWriter():
 
         def __init__(self, path) -> None:
             self.path = path
-            self.conn = sqlite3.connect('database.db')
+            self.conn = sqlite3.connect(os.path.realpath(os.path.join(self.path,'database.db')))
             self.c = self.conn.cursor()
             self.c.execute(''' CREATE TABLE IF NOT EXISTS bytes (
                 term text PRIMARY KEY,
@@ -20,9 +20,8 @@ class DiskIndexWriter():
 
         def add_entry(self, term, position):
             self.c.execute("INSERT OR REPLACE INTO bytes VALUES (?, ?)", (term, position,))
-    
+
         def get_entry(self, term):  # returns position
-            print(term)
             with self.conn:
                 self.c.execute("SELECT position FROM bytes WHERE term = (?) ", (term,))
                 return self.c.fetchone()[0]
@@ -75,7 +74,7 @@ class DiskIndexWriter():
                     f.write(struct.pack('ffii', doc_weights[tup][0], doc_weights[tup][1], doc_weights[tup][2], doc_weights[tup][3]))
                 f.write(struct.pack('f', doc_weights[-1]))
 
-                
+
 
             
 
