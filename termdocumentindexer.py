@@ -155,23 +155,16 @@ def _index_folder(corpus_path, folder, d):
         else:
             continue
 
-def special_queries(query, corpus_path):
+def special_queries(query, corpus_path, bqp):
     qry = query.split(' ')
     if len(qry) > 2:
         print('Invalid query: special query accept only one argument')
         sys.exit()
-
     if qry[0] == ':q':
         sys.exit()
     if qry[0] == ':stem':
         stemmer = Porter2Stemmer()
         print(stemmer.stem(qry[1]))
-        sys.exit()
-
-    if qry[0] == ':index':
-        d = get_directory(path)
-        index, soundex, vocab = index_corpus(d, corpus_path)
-        
     if qry[0] == ':vocab':
         l = sorted(list(vocab)[0:1000])
         for i in l:
@@ -179,7 +172,8 @@ def special_queries(query, corpus_path):
         print("Number of vocab words = ", len(l)) 
     if qry[0] == ':author':
         try:
-            docs = soundex.get_author_postings(qry[1])
+            author_comps = bqp.parse_query(qry[1])
+            docs = author_comps.get_author_postings(soundex)
             _print_documents(d, docs)
         except:
             print('The directory you chose does not contain authors')
@@ -240,18 +234,12 @@ def scoring_method(phraseQueryBag, diskIndex, corpus_length, method):
 def ranked_query_search(corpusPath, d):
     tp = BasicTokenProcessor()
     diskIndex = DiskPositionalIndex(corpusPath)
+    path_to_folder = os.path.dirname(corpusPath)
     
     while True:
         method = input ("Select one ranking method: \n1.Default \n2.tf-idf \n3.Okapi BM25 \n4.Wacky \n").lower()
         phraseQuery = input('> ')
-        if phraseQuery.startswith(':'):
-            special_queries(phraseQuery)
-            end_special_query = input("Search another special query? y / n\n")
-            if end_special_query == 'n':
-                sys.exit()
-            else:
-                continue
-    
+
         query = phraseQuery.split(' ')  # bag of words
         for q in range(len(query)):
             query[q] = tp.process_token([query[q]])
@@ -274,15 +262,16 @@ def ranked_query_search(corpusPath, d):
         else:
             continue
 
-def boolean_query_search(corpusPath):
+def boolean_query_search(corpusPath, d):
     tp = BasicTokenProcessor()
+    bqp = BooleanQueryParser()
     diskIndex = DiskPositionalIndex(corpusPath)
     while True:
         boolean_query = input("> ")
         if boolean_query.startswith(':'):
-            special_queries(boolean_query, corpusPath)
+            special_queries(boolean_query, corpusPath, bqp)
 
-        bqp = BooleanQueryParser()
+        
         comps = bqp.parse_query(boolean_query)
         
         print('-'*80)
@@ -333,7 +322,7 @@ if __name__ == "__main__":
             # index, soundex, vocab = buildMemoryIndex(corpusPath, corpusName, d)
             index, soundex, vocab = buildMemoryIndex(path, d)
             buildDiskIndex(path, index, vocab)
-            ranked_query_search(os.path.join(corpusPath, corpusName), d)
+            ranked_query_search(path, d)
             
         elif build == '2':
             # query index
@@ -369,15 +358,16 @@ if __name__ == "__main__":
                         print('-'*80, '\n')
                         print(d.get_document(id).get_string_content)
                         print('-'*80, '\n')
-                else:
-                    buildDiskIndex(path, index, vocab)
-                    boolean_query_search(path)
+                   
+            else:
+                buildDiskIndex(path, index, vocab)
+                boolean_query_search(path, d)
             
         elif build == '2':
             # query index
             path = input("Path to directory: ")
             d = get_directory(path)
-            boolean_query_search(path)
+            boolean_query_search(path, d)
             
         else:
             print("Please select the correct option.\n")
