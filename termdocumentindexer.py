@@ -30,7 +30,6 @@ import sys
 
 
 def index_corpus(corpus : DocumentCorpus, originalPath) -> Index:
-    
     token_processor = BasicTokenProcessor()
     diskWriter = DiskIndexWriter(originalPath)
     vocabulary = set()
@@ -41,6 +40,8 @@ def index_corpus(corpus : DocumentCorpus, originalPath) -> Index:
     soundex_index = SoundexIndex(vocabulary_authors, corpus_length)
     doc_weights = []
     docLengthAcc = 0
+
+    start_time = time.time()
 
     for d in corpus:
         byteSized = d.get_doc_size()
@@ -78,7 +79,6 @@ def index_corpus(corpus : DocumentCorpus, originalPath) -> Index:
             tftd_avg = 0
 
         ld = math.sqrt(wdt_sum)
-        # print(ld)
         doc_weights.append( (ld, tftd_avg, docLengthd, byteSized) )
   
 
@@ -89,6 +89,9 @@ def index_corpus(corpus : DocumentCorpus, originalPath) -> Index:
             vocabulary_authors.add(author[1])
             soundex_index.add_author(author[0], d.id)
             soundex_index.add_author(author[1], d.id)
+
+    indexing_time = time.time() - start_time
+    print("Indexing time = ", indexing_time ,'\n')
 
     docLengthA = docLengthAcc / corpus_length
     doc_weights.append(docLengthA)  # append average length of doc at the end 
@@ -117,76 +120,6 @@ def _print_documents(d, postings):
             print(i[0],"=> ", d.get_document(i[0]).title)    
     print("\nNumber of documents = ", len(postings))
 
-def _index_folder(corpus_path, folder, d):
-
-    tp = BasicTokenProcessor()
-    diskIndex = DiskPositionalIndex(corpus_path)
-
-    # search by author
-    while True:
-        author_query = input('Enter author name to search : ')
-        bqp = BooleanQueryParser()
-        comps_author = bqp.parse_query(author_query)
-        print('query = ',comps_author)
-        print('-'*80)
-        try:
-            author_posting = comps_author.get_author_postings(soundex)
-        except KeyError:
-            print('Cannot find postings for the term')
-            break
-
-        if len(author_posting) == 0:
-            print("No results found\n")
-            continue
-
-        _print_documents(d, author_posting)
-
-        print('-'*80)
-        _open = ('Open a document? (y/n)')
-        if _open == 'y' or _open == 'Y':
-            id = input("Enter the id of document to open it = ")
-            print('-'*80, '\n')
-            print(d.get_document(id).get_string_content)
-            print('-'*80, '\n')
-
-        end_author_query = input("Search another author? y / n\n")
-        if end_author_query.lower() == 'n':
-            break
-        else:
-            continue
-
-def special_queries(query, corpus_path, bqp):
-    qry = query.split(' ')
-    if len(qry) > 2:
-        print('Invalid query: special query accept only one argument')
-        sys.exit()
-    if qry[0] == ':q':
-        sys.exit()
-    if qry[0] == ':stem':
-        stemmer = Porter2Stemmer()
-        print(stemmer.stem(qry[1]))
-    if qry[0] == ':vocab':
-        l = sorted(list(vocab)[0:1000])
-        for i in l:
-            print(i)
-        print("Number of vocab words = ", len(l)) 
-    if qry[0] == ':author':
-        try:
-            author_comps = bqp.parse_query(qry[1])
-            docs = author_comps.get_author_postings(soundex)
-            _print_documents(d, docs)
-        except:
-            print('The directory you chose does not contain authors')
-    
-
-def buildMemoryIndex(path, d):  
-    startIndexTime = time.time()
-    print(f'indexing...\n')
-    index, soundex, vocab = index_corpus(d, path)
-    executionTime = time.time() - startIndexTime
-    print("Indexing time = ", executionTime ," seconds\n")
-
-    return index, soundex, vocab
 
 def buildDiskIndex(corpus_path, index, vocab):
     # call diskindexwriter on positional index
@@ -303,6 +236,70 @@ def boolean_query_search(corpusPath, d):
         else:
             continue
 
+def special_queries(query, soundex, vocab, path_to_folder, d):
+    qry = query.split(' ')
+    if len(qry) > 2:
+        print('Invalid query: special query accept only one argument')
+        sys.exit()
+    if qry[0] == ':q':
+        sys.exit()
+    if qry[0] == ':stem':
+        stemmer = Porter2Stemmer()
+        print(stemmer.stem(qry[1]))
+    if qry[0] == ':vocab':
+        l = sorted(list(vocab)[0:1000])
+        for i in l:
+            print(i)
+        print("Number of vocab words = ", len(l))
+    if qry[0] == ':index':
+        path = os.path.join(path_to_folder, qry[1])
+        index, soundex_new, vocab_new = index_corpus(d, path) 
+        buildDiskIndex(path, index, vocab_new)
+        ranked_special_search(path, d, index, vocab_new)
+
+    if qry[0] == ':author':
+        try:
+            author_comps = bqp.parse_query(qry[1])
+            docs = author_comps.get_author_postings(soundex)
+            _print_documents(d, docs)
+        except:
+            print('The directory you chose does not contain authors')
+
+def ranked_special_search(path, d, index, vocab):
+    tp = BasicTokenProcessor()
+    diskIndex = DiskPositionalIndex(path)
+    
+    
+    while True:
+        method = input ("Select one ranking method: \n1.Default \n2.tf-idf \n3.Okapi BM25 \n4.Wacky \n").lower()
+        phraseQuery = input('> ')
+        if phraseQuery.startswith(':'):
+            path_to_folder = os.path.dirname(path)
+            special_queries(phraseQuery, index, vocab, path_to_folder, d)
+            break
+
+        query = phraseQuery.split(' ')  # bag of words
+        for q in range(len(query)):
+            query[q] = tp.process_token([query[q]])
+        corpus_length = len(d)
+
+        # 4 different scoring methods for additional requirements
+        scoring_method(query, diskIndex, corpus_length, method)
+
+        print('-'*80)
+        _open = input('Open a document? (y/n) \n')
+        if _open == 'y' or _open == 'Y':
+            id = int(input("Enter doc_id = "))
+            print('-'*80, '\n')
+            print(d.get_document(id).get_string_content)
+            print('-'*80, '\n')
+            
+        end_query = input("Search another query? y / n\n")
+        if end_query.lower() == 'n':
+            break
+        else:
+            continue
+
 
 
 
@@ -320,9 +317,10 @@ if __name__ == "__main__":
             path = os.path.join(corpusPath, corpusName)
             d = get_directory(path)
             # index, soundex, vocab = buildMemoryIndex(corpusPath, corpusName, d)
-            index, soundex, vocab = buildMemoryIndex(path, d)
+            index, soundex, vocab = index_corpus(d, path)
             buildDiskIndex(path, index, vocab)
-            ranked_query_search(path, d)
+            # ranked_query_search(path, d)
+            ranked_special_search(path, d, index, vocab)
             
         elif build == '2':
             # query index
@@ -342,7 +340,7 @@ if __name__ == "__main__":
             corpusName = input("Enter folder name (no spaces) \n=> National Park \n=> Moby Dick \n=> mlb (major league baseball)\nType folder name without spaces:\n")
             path = os.path.join(corpusPath, corpusName)
             d = get_directory(path)
-            index, soundex, vocab = buildMemoryIndex(path, d)
+            index, soundex, vocab = index_corpus(d, path)
             if corpusName.startswith('mlb'):
                 author = input("Search by author? (y/n)\n")
                 if author == 'y':
