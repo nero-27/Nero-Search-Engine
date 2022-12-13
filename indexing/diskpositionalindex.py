@@ -18,26 +18,27 @@ class DiskPositionalIndex(Index):
         with open(os.path.join(self.path,'postings.bin'), 'rb') as f:
             postingBegins = self.diw.get_entry(term)
             finalPostings = []
-            f.seek(postingBegins)
-            dft = struct.unpack(frmt, f.read(b))[0]
-            doc_gap = 0
-            while dft>0:
-                posting = []
-                doc_id = struct.unpack(frmt, f.read(b))[0]
-                posting.append(doc_id + doc_gap)
-                doc_gap = doc_id
-                tft = struct.unpack(frmt, f.read(b))[0]
-                positions = []
-                pos_gap = 0
-                while tft>0:
-                    pos = struct.unpack(frmt, f.read(b))[0]
-                    positions.append(pos + pos_gap)
-                    pos_gap = pos
-                    tft -= 1
+            if postingBegins != None:
+                f.seek(postingBegins)
+                dft = struct.unpack(frmt, f.read(b))[0]
+                doc_gap = 0
+                while dft>0:
+                    posting = []
+                    doc_id = struct.unpack(frmt, f.read(b))[0]
+                    posting.append(doc_id + doc_gap)
+                    doc_gap = doc_id
+                    tft = struct.unpack(frmt, f.read(b))[0]
+                    positions = []
+                    pos_gap = 0
+                    while tft>0:
+                        pos = struct.unpack(frmt, f.read(b))[0]
+                        positions.append(pos + pos_gap)
+                        pos_gap = pos
+                        tft -= 1
 
-                posting.append(positions)
-                dft -= 1
-                finalPostings.append(posting)
+                    posting.append(positions)
+                    dft -= 1
+                    finalPostings.append(posting)
 
         return finalPostings
 
@@ -49,19 +50,20 @@ class DiskPositionalIndex(Index):
 
         with open(os.path.join(self.path, 'postings.bin'), 'rb') as f:
             start_position = self.diw.get_entry(term)
-            f.seek(start_position)
-            dft = struct.unpack(frmt, f.read(b))[0] # no of docs
-            doc_gap = 0
-            while dft > 0:
-                posting = []
-                doc_id = struct.unpack(frmt, f.read(b))[0]
-                posting.append(doc_id + doc_gap) # append doc_id
-                doc_gap = doc_id
-                tft = struct.unpack(frmt, f.read(b))[0]
-                posting.append(tft)
-                f.seek(b*tft, 1)
-                dft -= 1
-                posting_docids.append(posting)
+            if start_position != None:    
+                f.seek(start_position)
+                dft = struct.unpack(frmt, f.read(b))[0] # no of docs
+                doc_gap = 0
+                while dft > 0:
+                    posting = []
+                    doc_id = struct.unpack(frmt, f.read(b))[0]
+                    posting.append(doc_id + doc_gap) # append doc_id
+                    doc_gap = doc_id
+                    tft = struct.unpack(frmt, f.read(b))[0]
+                    posting.append(tft)
+                    f.seek(b*tft, 1)
+                    dft -= 1
+                    posting_docids.append(posting)
 
         return posting_docids
 

@@ -24,7 +24,10 @@ class DiskIndexWriter():
         def get_entry(self, term):  # returns position
             with self.conn:
                 self.c.execute("SELECT position FROM bytes WHERE term = (?) ", (term,))
-                return self.c.fetchone()[0]
+                result = self.c.fetchone()
+                if result:
+                    return result[0]
+                
 
         def writeIndex(self, index : Index, vocab : list):
             frmt = '>i'
